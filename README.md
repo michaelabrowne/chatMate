@@ -42,6 +42,29 @@ The installed app always checks `~/.config/chatmate/config.yaml` first, so chang
 
 > **macOS Local Network permission** — on first launch macOS may ask if ChatMate can access the local network. Click Allow, otherwise connections to LM Studio (or any local endpoint) will silently time out.
 
+## Installing (Windows)
+
+1. Download the latest `ChatMate-vX.X.X-windows.zip` from the [Releases](https://github.com/michaelabrowne/chatMate/releases/latest) page
+2. Extract the zip to a folder of your choice (e.g. `C:\Program Files\ChatMate`)
+3. Run `ChatMate.exe` inside the extracted folder
+
+Then create your config and `.env` files at:
+
+```
+%USERPROFILE%\.config\chatmate\config.yaml
+%USERPROFILE%\.config\chatmate\.env
+```
+
+Copy `config.yaml` from this repo and create `.env` with your API keys:
+
+```dotenv
+ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
+LMSTUDIO_API_KEY=lm-studio
+```
+
+> **Windows Defender SmartScreen** — on first launch Windows may warn "unrecognised app". Click **More info → Run anyway**.
+
 ## Quick Start (from source)
 
 1. Create your `.env` from the example and add tokens:
