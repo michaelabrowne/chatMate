@@ -78,7 +78,7 @@ class ChatController(QObject):
             provider_name=self.active_provider,
             model_name=self._active_model_name(),
         )
-        self.view.set_model_options(self.available_models(), self.active_provider)
+        self.view.set_model_options(self.available_models(), self._active_key())
         existing_sessions = self.chat_repository.list_sessions()
         if existing_sessions:
             self.session = existing_sessions[0]
@@ -225,9 +225,7 @@ class ChatController(QObject):
         if model_name:
             self._active_lmstudio_model = model_name
         self.view.update_provider_display(provider_name, self._active_model_name())
-        self.view.show_system_message(
-            f"Switched to {self._active_model_name()} via {provider_name}."
-        )
+        self.view.show_system_message(f"Switched to {self._active_model_name()}.")
 
     def _handle_generation_success(self, reply: str) -> None:
         if self._pending_session_id != self.session.session_id:
@@ -249,6 +247,11 @@ class ChatController(QObject):
         self._pending_session_id = None
         self._busy = False
         self.view.set_busy(False)
+
+    def _active_key(self) -> str:
+        if self.active_provider == "lmstudio":
+            return f"lmstudio|{self._active_lmstudio_model}"
+        return self.active_provider
 
     def _active_model_name(self) -> str:
         active = self.active_provider
