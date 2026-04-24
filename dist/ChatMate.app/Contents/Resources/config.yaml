@@ -1,0 +1,26 @@
+app:
+  name: ChatMate
+  system_prompt: "You are a helpful assistant."
+
+provider:
+  # Set this to `lmstudio` to use a local model through LM Studio.
+  active: lmstudio
+
+  openai:
+    model: "gpt-5.4"
+    base_url:
+
+  anthropic:
+    model: "claude-3-5-sonnet-latest"
+
+  lmstudio:
+    # LM Studio usually serves an OpenAI-compatible API on localhost:1234.
+    base_url: "http://192.168.50.102:1234/v1"
+    # Replace this with the exact model id shown inside LM Studio.
+    model: "gemma-4-31b-it"
+
+agent:
+  search:
+    default_root: "."
+    default_file_type: "pdf"
+    case_sensitive: false

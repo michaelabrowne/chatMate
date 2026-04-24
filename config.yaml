@@ -1,25 +1,31 @@
 app:
   name: ChatMate
-  system_prompt: "You are a helpful assistant."
+  system_prompt: >-
+    You are a helpful travel and lifestyle assistant. When users mention a location
+    or ask about destinations, use the available tools to fetch live weather forecasts,
+    currency exchange rates, and local attractions. Combine the results into a rich,
+    friendly response tailored to their query.
 
 provider:
-  # Set this to `lmstudio` to use a local model through LM Studio.
+  # Set to: openai | anthropic | lmstudio | gemini
   active: lmstudio
 
   openai:
-    model: "gpt-5.4"
+    model: "gpt-4o"
     base_url:
 
   anthropic:
-    model: "claude-3-5-sonnet-latest"
+    model: "claude-sonnet-4-5"
 
   lmstudio:
-    # LM Studio usually serves an OpenAI-compatible API on localhost:1234.
     base_url: "http://192.168.50.102:1234/v1"
-    # Replace this with the exact model id shown inside LM Studio.
-    model: "gemma-4-31b-it"
+    model: "qwen/qwen3.6-35b-a3b"
+
+  gemini:
+    model: "gemini-2.0-flash"
 
 agent:
+  tools_enabled: true
   search:
     default_root: "."
     default_file_type: "pdf"

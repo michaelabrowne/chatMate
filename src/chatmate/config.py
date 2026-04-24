@@ -29,11 +29,18 @@ class AnthropicSettings:
 
 
 @dataclass(slots=True)
+class GeminiSettings:
+    api_key: str | None
+    model: str
+
+
+@dataclass(slots=True)
 class ProviderSettings:
     active: str
     openai: OpenAISettings
     anthropic: AnthropicSettings
     lmstudio: OpenAISettings
+    gemini: GeminiSettings
 
 
 @dataclass(slots=True)
@@ -45,6 +52,7 @@ class SearchAgentSettings:
 
 @dataclass(slots=True)
 class AgentSettings:
+    tools_enabled: bool
     search: SearchAgentSettings
 
 
@@ -92,20 +100,27 @@ def load_app_config(path: Path) -> AppConfig:
         model=_require(_require(provider_raw, "lmstudio"), "model"),
         base_url=_require(_require(provider_raw, "lmstudio"), "base_url"),
     )
+    gemini_raw = provider_raw.get("gemini", {})
+    gemini_settings = GeminiSettings(
+        api_key=os.getenv("GEMINI_API_KEY"),
+        model=gemini_raw.get("model", "gemini-2.0-flash"),
+    )
 
     provider = ProviderSettings(
         active=_require(provider_raw, "active"),
         openai=openai_settings,
         anthropic=anthropic_settings,
         lmstudio=lmstudio_settings,
+        gemini=gemini_settings,
     )
 
     agent = AgentSettings(
+        tools_enabled=agent_raw.get("tools_enabled", False),
         search=SearchAgentSettings(
             default_root=search_raw.get("default_root", "."),
             default_file_type=search_raw.get("default_file_type", "pdf"),
             case_sensitive=search_raw.get("case_sensitive", False),
-        )
+        ),
     )
 
     return AppConfig(app=app, provider=provider, agent=agent)

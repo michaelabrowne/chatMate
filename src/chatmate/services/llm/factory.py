@@ -4,6 +4,8 @@ from chatmate.config import AppConfig
 from chatmate.services.llm.anthropic_client import AnthropicLLMClient
 from chatmate.services.llm.openai_client import OpenAICompatibleLLMClient
 
+_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+
 
 def build_llm_client(config: AppConfig, provider_name: str | None = None):
     active = (provider_name or config.provider.active).lower()
@@ -35,4 +37,14 @@ def build_llm_client(config: AppConfig, provider_name: str | None = None):
             base_url=settings.base_url,
         )
 
-    raise ValueError(f"Unsupported provider: {config.provider.active}")
+    if active == "gemini":
+        settings = config.provider.gemini
+        if not settings.api_key:
+            raise ValueError("Missing GEMINI_API_KEY in .env for the Gemini provider.")
+        return OpenAICompatibleLLMClient(
+            api_key=settings.api_key,
+            model=settings.model,
+            base_url=_GEMINI_BASE_URL,
+        )
+
+    raise ValueError(f"Unsupported provider: {active}")

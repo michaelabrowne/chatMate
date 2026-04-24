@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+from typing import Callable
+
 from anthropic import Anthropic
 
-from chatmate.services.llm.base import LLMClient
+from chatmate.services.llm.base import LLMClient, ToolDefinition
 
 
 class AnthropicLLMClient(LLMClient):
@@ -10,10 +13,9 @@ class AnthropicLLMClient(LLMClient):
         self.client = Anthropic(api_key=api_key)
         self.model = model
 
-    def generate(self, messages: list[dict[str, str]]) -> str:
+    def generate(self, messages: list[dict]) -> str:
         system_prompt = ""
-        prompt_messages: list[dict[str, str]] = []
-
+        prompt_messages: list[dict] = []
         for message in messages:
             if message["role"] == "system":
                 system_prompt = message["content"]
@@ -26,5 +28,56 @@ class AnthropicLLMClient(LLMClient):
             max_tokens=1024,
             messages=prompt_messages,
         )
-        parts = [block.text for block in response.content if getattr(block, "text", None)]
-        return "\n".join(parts)
+        return "\n".join(b.text for b in response.content if getattr(b, "text", None))
+
+    def generate_with_tools(
+        self,
+        messages: list[dict],
+        tools: list[ToolDefinition],
+        tool_executor: Callable[[str, dict], str],
+    ) -> str:
+        system = next((m["content"] for m in messages if m["role"] == "system"), "")
+        working = [m for m in messages if m["role"] != "system"]
+
+        anthropic_tools = [
+            {"name": t.name, "description": t.description, "input_schema": t.parameters}
+            for t in tools
+        ]
+
+        for _ in range(10):
+            response = self.client.messages.create(
+                model=self.model,
+                system=system,
+                max_tokens=4096,
+                tools=anthropic_tools,
+                messages=working,
+            )
+
+            # Serialize content blocks so they can be replayed as message history
+            assistant_content = []
+            for block in response.content:
+                if block.type == "text":
+                    assistant_content.append({"type": "text", "text": block.text})
+                elif block.type == "tool_use":
+                    assistant_content.append(
+                        {"type": "tool_use", "id": block.id, "name": block.name, "input": block.input}
+                    )
+
+            if response.stop_reason == "end_turn":
+                return "\n".join(b["text"] for b in assistant_content if b.get("type") == "text")
+
+            working.append({"role": "assistant", "content": assistant_content})
+
+            tool_calls = [b for b in response.content if b.type == "tool_use"]
+            with ThreadPoolExecutor() as ex:
+                futures = {tc.id: ex.submit(tool_executor, tc.name, tc.input) for tc in tool_calls}
+
+            working.append({
+                "role": "user",
+                "content": [
+                    {"type": "tool_result", "tool_use_id": tid, "content": fut.result()}
+                    for tid, fut in futures.items()
+                ],
+            })
+
+        return ""

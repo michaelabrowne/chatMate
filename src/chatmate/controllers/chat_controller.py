@@ -4,9 +4,10 @@ from PySide6.QtCore import QObject, QThread, Signal
 
 from chatmate.config import AppConfig
 from chatmate.models.chat import ChatSession
+from chatmate.services.agents.dispatcher import ToolDispatcher
 from chatmate.services.chat_repository import ChatRepository
+from chatmate.services.llm.base import LLMClient, ToolDefinition
 from chatmate.services.llm.factory import build_llm_client
-from chatmate.services.llm.base import LLMClient
 from chatmate.views.main_window import MainWindow
 
 
@@ -15,14 +16,27 @@ class ChatGenerationWorker(QObject):
     succeeded = Signal(str)
     failed = Signal(str)
 
-    def __init__(self, llm_client: LLMClient, messages: list[dict[str, str]]) -> None:
+    def __init__(
+        self,
+        llm_client: LLMClient,
+        messages: list[dict],
+        tools: list[ToolDefinition] | None = None,
+        tool_executor=None,
+    ) -> None:
         super().__init__()
         self.llm_client = llm_client
         self.messages = messages
+        self.tools = tools
+        self.tool_executor = tool_executor
 
     def run(self) -> None:
         try:
-            reply = self.llm_client.generate(self.messages)
+            if self.tools and self.tool_executor:
+                reply = self.llm_client.generate_with_tools(
+                    self.messages, self.tools, self.tool_executor
+                )
+            else:
+                reply = self.llm_client.generate(self.messages)
         except Exception as exc:
             self.failed.emit(str(exc))
         else:
@@ -41,12 +55,12 @@ class ChatController(QObject):
     ) -> None:
         super().__init__()
         self.config = config
-        self.llm_client = llm_client
         self.chat_repository = chat_repository
         self.view = view
         self.session = ChatSession(system_prompt=config.app.system_prompt)
         self.active_provider = config.provider.active.lower()
         self.llm_client = build_llm_client(config, self.active_provider)
+        self._dispatcher = ToolDispatcher() if config.agent.tools_enabled else None
         self._busy = False
         self._request_thread: QThread | None = None
         self._worker: ChatGenerationWorker | None = None
@@ -83,7 +97,12 @@ class ChatController(QObject):
 
         prompt_messages = self.session.as_prompt_messages()
         self._request_thread = QThread()
-        self._worker = ChatGenerationWorker(self.llm_client, prompt_messages)
+        self._worker = ChatGenerationWorker(
+            self.llm_client,
+            prompt_messages,
+            tools=self._dispatcher.definitions if self._dispatcher else None,
+            tool_executor=self._dispatcher.execute if self._dispatcher else None,
+        )
         self._worker.moveToThread(self._request_thread)
         self._request_thread.started.connect(self._worker.run)
         self._worker.succeeded.connect(self._handle_generation_success)
@@ -178,6 +197,7 @@ class ChatController(QObject):
             ("openai", self.config.provider.openai.model),
             ("anthropic", self.config.provider.anthropic.model),
             ("lmstudio", self.config.provider.lmstudio.model),
+            ("gemini", self.config.provider.gemini.model),
         ]
 
     def switch_model(self, provider_name: str) -> None:
@@ -193,7 +213,7 @@ class ChatController(QObject):
         self.active_provider = provider_name
         self.view.update_provider_display(provider_name, self._active_model_name())
         self.view.show_system_message(
-            f"Switched model to {self._active_model_name()} via {provider_name}."
+            f"Switched to {self._active_model_name()} via {provider_name}."
         )
 
     def _handle_generation_success(self, reply: str) -> None:
@@ -223,6 +243,8 @@ class ChatController(QObject):
             return self.config.provider.openai.model
         if active == "anthropic":
             return self.config.provider.anthropic.model
+        if active == "gemini":
+            return self.config.provider.gemini.model
         return self.config.provider.lmstudio.model
 
     def _autosave(self) -> None:
