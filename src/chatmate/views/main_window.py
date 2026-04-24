@@ -493,10 +493,11 @@ class MainWindow(QMainWindow):
         try:
             self.model_selector.clear()
             active_index = 0
-            for index, (provider, model) in enumerate(models):
+            for index, (key, model) in enumerate(models):
+                provider = key.split("|")[0]
                 label = f"{provider} · {model}"
-                self.model_selector.addItem(label, provider)
-                if provider == active_provider:
+                self.model_selector.addItem(label, key)
+                if key == active_provider or provider == active_provider:
                     active_index = index
             self.model_selector.setCurrentIndex(active_index)
         finally:
@@ -559,7 +560,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(content, 5000)
 
     def show_assistant_pending(self) -> None:
-        self._pending_assistant_widget = self._add_message_widget("assistant", "Thinking…")
+        self._pending_assistant_widget = self._add_message_widget("assistant", "")
         self.statusBar().showMessage("Waiting for response…")
 
     def show_response_error(self, content: str) -> None:

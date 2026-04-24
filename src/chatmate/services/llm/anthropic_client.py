@@ -5,7 +5,7 @@ from typing import Callable
 
 from anthropic import Anthropic
 
-from chatmate.services.llm.base import LLMClient, ToolDefinition
+from chatmate.services.llm.base import LLMClient, ToolDefinition, TokenCallback
 
 
 class AnthropicLLMClient(LLMClient):
@@ -13,7 +13,7 @@ class AnthropicLLMClient(LLMClient):
         self.client = Anthropic(api_key=api_key)
         self.model = model
 
-    def generate(self, messages: list[dict]) -> str:
+    def generate(self, messages: list[dict], on_token: TokenCallback = None) -> str:
         system_prompt = ""
         prompt_messages: list[dict] = []
         for message in messages:
@@ -21,6 +21,17 @@ class AnthropicLLMClient(LLMClient):
                 system_prompt = message["content"]
             else:
                 prompt_messages.append(message)
+
+        if on_token:
+            with self.client.messages.stream(
+                model=self.model,
+                system=system_prompt,
+                max_tokens=1024,
+                messages=prompt_messages,
+            ) as stream:
+                for text in stream.text_stream:
+                    on_token(text)
+            return stream.get_final_text()
 
         response = self.client.messages.create(
             model=self.model,
@@ -35,6 +46,7 @@ class AnthropicLLMClient(LLMClient):
         messages: list[dict],
         tools: list[ToolDefinition],
         tool_executor: Callable[[str, dict], str],
+        on_token: TokenCallback = None,
     ) -> str:
         system = next((m["content"] for m in messages if m["role"] == "system"), "")
         working = [m for m in messages if m["role"] != "system"]
@@ -45,17 +57,26 @@ class AnthropicLLMClient(LLMClient):
         ]
 
         for _ in range(10):
-            response = self.client.messages.create(
+            with self.client.messages.stream(
                 model=self.model,
                 system=system,
                 max_tokens=4096,
                 tools=anthropic_tools,
                 messages=working,
-            )
+            ) as stream:
+                # Stream text tokens for the final (non-tool) turn
+                for event in stream:
+                    if (
+                        event.type == "content_block_delta"
+                        and getattr(event.delta, "type", None) == "text_delta"
+                        and on_token
+                    ):
+                        on_token(event.delta.text)
 
-            # Serialize content blocks so they can be replayed as message history
+                final_msg = stream.get_final_message()
+
             assistant_content = []
-            for block in response.content:
+            for block in final_msg.content:
                 if block.type == "text":
                     assistant_content.append({"type": "text", "text": block.text})
                 elif block.type == "tool_use":
@@ -63,12 +84,12 @@ class AnthropicLLMClient(LLMClient):
                         {"type": "tool_use", "id": block.id, "name": block.name, "input": block.input}
                     )
 
-            if response.stop_reason == "end_turn":
+            if final_msg.stop_reason == "end_turn":
                 return "\n".join(b["text"] for b in assistant_content if b.get("type") == "text")
 
             working.append({"role": "assistant", "content": assistant_content})
 
-            tool_calls = [b for b in response.content if b.type == "tool_use"]
+            tool_calls = [b for b in final_msg.content if b.type == "tool_use"]
             with ThreadPoolExecutor() as ex:
                 futures = {tc.id: ex.submit(tool_executor, tc.name, tc.input) for tc in tool_calls}
 

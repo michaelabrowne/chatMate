@@ -19,7 +19,10 @@ provider:
 
   lmstudio:
     base_url: "http://192.168.50.102:1234/v1"
-    model: "qwen/qwen3.6-35b-a3b"
+    models:
+      - "qwen/qwen3.6-35b-a3b"
+      - "google/gemma-4"          # update with exact LM Studio model ID
+      - "openai/o1-120b"          # update with exact LM Studio model ID
 
   gemini:
     model: "gemini-2.0-flash"

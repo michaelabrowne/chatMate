@@ -35,11 +35,18 @@ class GeminiSettings:
 
 
 @dataclass(slots=True)
+class LMStudioSettings:
+    api_key: str
+    base_url: str
+    models: list[str]
+
+
+@dataclass(slots=True)
 class ProviderSettings:
     active: str
     openai: OpenAISettings
     anthropic: AnthropicSettings
-    lmstudio: OpenAISettings
+    lmstudio: LMStudioSettings
     gemini: GeminiSettings
 
 
@@ -95,11 +102,16 @@ def load_app_config(path: Path) -> AppConfig:
         api_key=os.getenv("ANTHROPIC_API_KEY"),
         model=_require(_require(provider_raw, "anthropic"), "model"),
     )
-    lmstudio_settings = OpenAISettings(
+    lmstudio_raw = _require(provider_raw, "lmstudio")
+    lmstudio_models = lmstudio_raw.get("models") or []
+    if not lmstudio_models and "model" in lmstudio_raw:
+        lmstudio_models = [lmstudio_raw["model"]]
+    lmstudio_settings = LMStudioSettings(
         api_key=os.getenv("LMSTUDIO_API_KEY", "lm-studio"),
-        model=_require(_require(provider_raw, "lmstudio"), "model"),
-        base_url=_require(_require(provider_raw, "lmstudio"), "base_url"),
+        base_url=_require(lmstudio_raw, "base_url"),
+        models=lmstudio_models,
     )
+
     gemini_raw = provider_raw.get("gemini", {})
     gemini_settings = GeminiSettings(
         api_key=os.getenv("GEMINI_API_KEY"),

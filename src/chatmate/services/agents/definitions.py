@@ -24,7 +24,7 @@ TOOL_DEFINITIONS: list[ToolDefinition] = [
         name="get_exchange_rates",
         description=(
             "Get live exchange rates from the local currency to GBP, EUR and USD. "
-            "Call this when the user asks about money, costs, or currency at a destination."
+            "Call this when the user asks about travelling  , money, costs, or currency at a destination."
         ),
         parameters={
             "type": "object",

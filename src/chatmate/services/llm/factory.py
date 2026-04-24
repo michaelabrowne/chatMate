@@ -7,7 +7,7 @@ from chatmate.services.llm.openai_client import OpenAICompatibleLLMClient
 _GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
 
-def build_llm_client(config: AppConfig, provider_name: str | None = None):
+def build_llm_client(config: AppConfig, provider_name: str | None = None, model_override: str | None = None):
     active = (provider_name or config.provider.active).lower()
 
     if active == "openai":
@@ -31,9 +31,10 @@ def build_llm_client(config: AppConfig, provider_name: str | None = None):
 
     if active == "lmstudio":
         settings = config.provider.lmstudio
+        model = model_override or (settings.models[0] if settings.models else "")
         return OpenAICompatibleLLMClient(
             api_key=settings.api_key,
-            model=settings.model,
+            model=model,
             base_url=settings.base_url,
         )
 

@@ -12,9 +12,12 @@ class ToolDefinition:
     parameters: dict  # JSON Schema object
 
 
+TokenCallback = Callable[[str], None] | None
+
+
 class LLMClient(ABC):
     @abstractmethod
-    def generate(self, messages: list[dict]) -> str:
+    def generate(self, messages: list[dict], on_token: TokenCallback = None) -> str:
         raise NotImplementedError
 
     def generate_with_tools(
@@ -22,6 +25,6 @@ class LLMClient(ABC):
         messages: list[dict],
         tools: list[ToolDefinition],
         tool_executor: Callable[[str, dict], str],
+        on_token: TokenCallback = None,
     ) -> str:
-        # Default fallback — subclasses override for real tool-use support
-        return self.generate(messages)
+        return self.generate(messages, on_token=on_token)

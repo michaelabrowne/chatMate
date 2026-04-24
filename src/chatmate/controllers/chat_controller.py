@@ -15,6 +15,7 @@ class ChatGenerationWorker(QObject):
     finished = Signal()
     succeeded = Signal(str)
     failed = Signal(str)
+    token_received = Signal(str)
 
     def __init__(
         self,
@@ -30,13 +31,14 @@ class ChatGenerationWorker(QObject):
         self.tool_executor = tool_executor
 
     def run(self) -> None:
+        on_token = lambda chunk: self.token_received.emit(chunk)
         try:
             if self.tools and self.tool_executor:
                 reply = self.llm_client.generate_with_tools(
-                    self.messages, self.tools, self.tool_executor
+                    self.messages, self.tools, self.tool_executor, on_token=on_token
                 )
             else:
-                reply = self.llm_client.generate(self.messages)
+                reply = self.llm_client.generate(self.messages, on_token=on_token)
         except Exception as exc:
             self.failed.emit(str(exc))
         else:
@@ -59,7 +61,10 @@ class ChatController(QObject):
         self.view = view
         self.session = ChatSession(system_prompt=config.app.system_prompt)
         self.active_provider = config.provider.active.lower()
-        self.llm_client = build_llm_client(config, self.active_provider)
+        self._active_lmstudio_model: str = (
+            config.provider.lmstudio.models[0] if config.provider.lmstudio.models else ""
+        )
+        self.llm_client = build_llm_client(config, self.active_provider, self._active_lmstudio_model if self.active_provider == "lmstudio" else None)
         self._dispatcher = ToolDispatcher() if config.agent.tools_enabled else None
         self._busy = False
         self._request_thread: QThread | None = None
@@ -105,6 +110,7 @@ class ChatController(QObject):
         )
         self._worker.moveToThread(self._request_thread)
         self._request_thread.started.connect(self._worker.run)
+        self._worker.token_received.connect(self.view.append_to_last_assistant_message)
         self._worker.succeeded.connect(self._handle_generation_success)
         self._worker.failed.connect(self._handle_generation_error)
         self._worker.finished.connect(self._finish_generation)
@@ -193,24 +199,31 @@ class ChatController(QObject):
         self._refresh_session_list()
 
     def available_models(self) -> list[tuple[str, str]]:
-        return [
+        entries = [
             ("openai", self.config.provider.openai.model),
             ("anthropic", self.config.provider.anthropic.model),
-            ("lmstudio", self.config.provider.lmstudio.model),
-            ("gemini", self.config.provider.gemini.model),
         ]
+        for model in self.config.provider.lmstudio.models:
+            entries.append((f"lmstudio|{model}", model))
+        entries.append(("gemini", self.config.provider.gemini.model))
+        return entries
 
-    def switch_model(self, provider_name: str) -> None:
+    def switch_model(self, provider_key: str) -> None:
         if self._busy:
             self.view.show_system_message("Wait for the current response to finish before switching models.")
             return
-        provider_name = provider_name.lower()
+        if "|" in provider_key:
+            provider_name, model_name = provider_key.split("|", 1)
+        else:
+            provider_name, model_name = provider_key.lower(), None
         try:
-            self.llm_client = build_llm_client(self.config, provider_name)
+            self.llm_client = build_llm_client(self.config, provider_name, model_name)
         except Exception as exc:
             self.view.show_system_message(f"Could not switch model: {exc}")
             return
         self.active_provider = provider_name
+        if model_name:
+            self._active_lmstudio_model = model_name
         self.view.update_provider_display(provider_name, self._active_model_name())
         self.view.show_system_message(
             f"Switched to {self._active_model_name()} via {provider_name}."
@@ -245,7 +258,7 @@ class ChatController(QObject):
             return self.config.provider.anthropic.model
         if active == "gemini":
             return self.config.provider.gemini.model
-        return self.config.provider.lmstudio.model
+        return self._active_lmstudio_model
 
     def _autosave(self) -> None:
         self.chat_repository.save(self.session)
