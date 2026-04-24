@@ -37,7 +37,5 @@ testpaths = ["tests"]
 [dependency-groups]
 dev = [
   "pillow>=12.2.0",
-  "pyinstaller>=6.13",
-  "pyinstaller-hooks-contrib>=2026.4",
-  "pytest>=8.3.3",
+  "pytest>=8.3.5",
 ]
