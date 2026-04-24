@@ -39,7 +39,7 @@ exe = EXE(
     upx=False,
     console=False,
     disable_windowed_traceback=False,
-    icon=None,
+    icon="assets/ChatMate.ico",
 )
 
 coll = COLLECT(

@@ -58,7 +58,7 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name="ChatMate.app",
-    icon=None,
+    icon="assets/ChatMate.icns",
     bundle_identifier="com.chatmate.app",
     info_plist={
         "CFBundleName": "ChatMate",
