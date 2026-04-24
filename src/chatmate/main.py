@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QApplication
 
 from chatmate.config import load_app_config
 from chatmate.controllers.chat_controller import ChatController
+from chatmate.services.agents.server_manager import AgentServerManager
 from chatmate.services.chat_repository import ChatRepository
 from chatmate.services.llm.factory import build_llm_client
 from chatmate.views.main_window import MainWindow
@@ -25,12 +26,21 @@ def _config_path() -> Path:
 
 def main() -> None:
     config = load_app_config(_config_path())
-    llm_client = build_llm_client(config)
-    # Always store chats in ~/.chatmate/chats so they survive app updates
-    chat_repository = ChatRepository(Path.home() / ".chatmate" / "chats")
-    app = QApplication.instance() or QApplication([])
-    view = MainWindow()
-    controller = ChatController(config, llm_client, chat_repository, view)
-    controller.initialize()
-    view.show()
-    app.exec()
+
+    server_manager: AgentServerManager | None = None
+    if config.agent.tools_enabled:
+        server_manager = AgentServerManager()
+        server_manager.start_all()
+
+    try:
+        llm_client = build_llm_client(config)
+        chat_repository = ChatRepository(Path.home() / ".chatmate" / "chats")
+        app = QApplication.instance() or QApplication([])
+        view = MainWindow()
+        controller = ChatController(config, llm_client, chat_repository, view)
+        controller.initialize()
+        view.show()
+        app.exec()
+    finally:
+        if server_manager:
+            server_manager.stop_all()

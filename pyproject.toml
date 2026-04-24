@@ -10,15 +10,20 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
   "anthropic>=0.40.0",
+  "fastapi>=0.100.0",
   "markdown2>=2.5.2",
   "openai>=1.54.0",
   "PySide6>=6.8.0",
   "PyYAML>=6.0.2",
   "python-dotenv>=1.0.1",
+  "uvicorn>=0.20.0",
 ]
 
 [project.scripts]
 chatmate = "chatmate.main:main"
+chatmate-weather-agent = "chatmate.services.agents.servers.weather_server:main"
+chatmate-currency-agent = "chatmate.services.agents.servers.currency_server:main"
+chatmate-things-agent = "chatmate.services.agents.servers.things_to_do_server:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
