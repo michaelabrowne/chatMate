@@ -1,0 +1,7 @@
+anthropic>=0.40.0
+markdown2>=2.5.2
+openai>=1.54.0
+PySide6>=6.8.0
+PyYAML>=6.0.2
+python-dotenv>=1.0.1
+pytest>=8.3.3
