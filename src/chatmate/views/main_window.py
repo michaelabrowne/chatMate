@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import html
-
 import markdown2
-from PySide6.QtCore import QPoint, Qt, QTimer, Signal
+from PySide6.QtCore import QPoint, QSizeF, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QContextMenuEvent, QIcon, QKeyEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -57,7 +55,7 @@ class ChatMessageWidget(QFrame):
     delete_requested = Signal(str)
 
     _MESSAGE_CSS = (
-        "body{font-family:Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:#e5e7eb;}"
+        "body{font-size:14px;line-height:1.5;color:#e5e7eb;}"
         "pre{background:#0b0d10;border:1px solid #30363d;border-radius:4px;padding:10px;white-space:pre-wrap;}"
         "code{font-family:'Menlo','SF Mono',Consolas,'Courier New',monospace;font-size:13px;}"
         "p{margin:0 0 8px 0;}"
@@ -79,8 +77,12 @@ class ChatMessageWidget(QFrame):
         self.setObjectName(f"{role}Message")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setFrameShape(QFrame.Shape.NoFrame)
-        self.setMaximumWidth(860 if role == "assistant" else 760)
-        self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Minimum)
+        if role == "assistant":
+            self.setMaximumWidth(860)
+            self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        else:
+            self.setMaximumWidth(760)
+            self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
         self.role_label = QLabel(role.title())
         self.role_label.setObjectName("messageRole")
@@ -110,6 +112,7 @@ class ChatMessageWidget(QFrame):
         self.body.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.body.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.body.setStyleSheet("QTextBrowser { background: transparent; border: none; }")
+        self.body.setFont(QApplication.font())
         self.body.document().setDefaultStyleSheet(self._MESSAGE_CSS)
         self.body.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.body.document().contentsChanged.connect(self._resize_body)
@@ -136,19 +139,21 @@ class ChatMessageWidget(QFrame):
     def set_message_id(self, message_id: str | None) -> None:
         self.message_id = message_id
 
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._resize_body()
+
     def _resize_body(self) -> None:
+        self.body.document().setPageSize(QSizeF(self.body.viewport().width(), -1))
         height = int(self.body.document().size().height()) + 4
         self.body.setFixedHeight(max(20, height))
 
     def set_content(self, content: str) -> None:
         self.content = content
-        if self.role == "assistant":
-            body_html = markdown2.markdown(
-                content,
-                extras=["fenced-code-blocks", "tables", "strike", "break-on-newline"],
-            )
-        else:
-            body_html = f"<p>{html.escape(content).replace(chr(10), '<br>')}</p>"
+        body_html = markdown2.markdown(
+            content,
+            extras=["fenced-code-blocks", "tables", "strike", "break-on-newline"],
+        )
         self.body.setHtml(body_html)
 
     def append_content(self, chunk: str) -> None:
@@ -233,7 +238,6 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(
             """
             QWidget {
-                font-family: Helvetica, Arial, sans-serif;
                 background: #111316;
                 color: #e5e7eb;
             }
@@ -404,7 +408,7 @@ class MainWindow(QMainWindow):
         self.message_layout = QVBoxLayout()
         self.message_layout.setContentsMargins(18, 18, 18, 18)
         self.message_layout.setSpacing(12)
-        self.message_layout.addStretch(1)
+        self.message_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.message_container.setLayout(self.message_layout)
 
         self.chat_scroll = QScrollArea()
@@ -593,11 +597,15 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Copied to clipboard.", 3000)
 
     def _clear_messages(self) -> None:
-        while self.message_layout.count() > 1:
+        while self.message_layout.count() > 0:
             item = self.message_layout.takeAt(0)
-            widget = item.widget()
-            if widget is not None:
-                widget.deleteLater()
+            if item.widget() is not None:
+                item.widget().deleteLater()
+            elif item.layout() is not None:
+                while item.layout().count() > 0:
+                    sub = item.layout().takeAt(0)
+                    if sub.widget() is not None:
+                        sub.widget().deleteLater()
         self._message_widgets = []
 
     def _add_message_widget(
@@ -609,12 +617,14 @@ class MainWindow(QMainWindow):
         widget = ChatMessageWidget(message_id, role, content)
         widget.copy_requested.connect(self._on_copy_message_clicked)
         widget.delete_requested.connect(self._on_delete_message_clicked)
-        alignment = Qt.AlignmentFlag.AlignRight if role == "user" else Qt.AlignmentFlag.AlignLeft
-        self.message_layout.insertWidget(
-            max(0, self.message_layout.count() - 1),
-            widget,
-            alignment=alignment,
-        )
+        if role == "user":
+            row = QHBoxLayout()
+            row.setContentsMargins(0, 0, 0, 0)
+            row.addStretch(1)
+            row.addWidget(widget)
+            self.message_layout.addLayout(row)
+        else:
+            self.message_layout.addWidget(widget)
         self._message_widgets.append(widget)
         self._scroll_to_bottom()
         return widget
