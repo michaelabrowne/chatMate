@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor
 
 from .geocoding import geocode
 
@@ -46,14 +45,8 @@ _COUNTRY_CURRENCY: dict[str, str] = {
     "ZM": "ZMW", "ZW": "ZWL",
 }
 
-_SYMBOLS = {"GBP": "£", "EUR": "€", "USD": "$"}
-
-
-def _fetch_rate(base: str, target: str) -> float | None:
-    url = f"https://open.er-api.com/v6/latest/{base}"
-    with urllib.request.urlopen(url, timeout=10) as resp:
-        data = json.loads(resp.read())
-    return data.get("rates", {}).get(target)
+# Top currencies travellers are likely to convert from
+_SHOW_CURRENCIES = ["GBP", "EUR", "USD", "SGD", "AUD", "CAD", "JPY", "CHF", "HKD", "INR"]
 
 
 def get_exchange_rates(location: str) -> str:
@@ -65,19 +58,24 @@ def get_exchange_rates(location: str) -> str:
     if not currency:
         return f"Unknown currency for country code: {geo['country_code']}"
 
-    bases = [b for b in ("GBP", "EUR", "USD") if b != currency]
-    if not bases:
-        return f"{geo['name']} uses {currency}, which is one of the base currencies."
+    # Single call using USD as the universal base, then cross-compute
+    url = "https://open.er-api.com/v6/latest/USD"
+    with urllib.request.urlopen(url, timeout=10) as resp:
+        data = json.loads(resp.read())
 
-    with ThreadPoolExecutor(max_workers=3) as ex:
-        futures = {base: ex.submit(_fetch_rate, base, currency) for base in bases}
+    rates = data.get("rates", {})
+    usd_to_local = rates.get(currency)
+    if not usd_to_local:
+        return f"Exchange rate data unavailable for {currency}."
 
     lines = [f"Exchange rates into {currency} ({geo['name']}, {geo['country']}):"]
-    for base, fut in futures.items():
-        rate = fut.result()
-        sym = _SYMBOLS.get(base, "")
-        if rate:
-            lines.append(f"  {sym}1 {base} = {rate:,.2f} {currency}")
-        else:
-            lines.append(f"  {base}: rate unavailable")
+    for base in _SHOW_CURRENCIES:
+        if base == currency:
+            continue
+        usd_to_base = rates.get(base)
+        if usd_to_base:
+            # cross-rate: 1 base = (usd_to_local / usd_to_base) local
+            rate = usd_to_local / usd_to_base
+            lines.append(f"  1 {base} = {rate:,.2f} {currency}")
+
     return "\n".join(lines)
