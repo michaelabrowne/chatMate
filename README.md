@@ -16,7 +16,33 @@ It supports multiple LLM backends through `config.yaml` and `.env`:
 - Saved chat list with create, rename, load, and delete controls
 - Shared chat history model
 
-## Quick Start
+## Installing (macOS)
+
+Run the one-line installer — it downloads the latest release, installs to `/Applications`, and removes the Gatekeeper quarantine flag:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/michaelabrowne/chatMate/develop/install.sh | bash
+```
+
+Then create your config directory:
+
+```bash
+mkdir -p ~/.config/chatmate
+```
+
+Copy `config.yaml` from this repo (or write your own) to `~/.config/chatmate/config.yaml`, then create `~/.config/chatmate/.env` with your API keys:
+
+```dotenv
+ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
+LMSTUDIO_API_KEY=lm-studio
+```
+
+The installed app always checks `~/.config/chatmate/config.yaml` first, so changes there survive app updates.
+
+> **macOS Local Network permission** — on first launch macOS may ask if ChatMate can access the local network. Click Allow, otherwise connections to LM Studio (or any local endpoint) will silently time out.
+
+## Quick Start (from source)
 
 1. Create your `.env` from the example and add tokens:
 
@@ -60,7 +86,7 @@ To use a local model through LM Studio:
 1. Start the LM Studio local server.
 2. In `config.yaml`, set `provider.active: lmstudio`.
 3. Set the LM Studio model id under `provider.lmstudio.model`.
-4. Keep `provider.lmstudio.base_url` as `http://localhost:1234/v1` unless you changed the port.
+4. Set `provider.lmstudio.base_url` to `http://localhost:1234/v1` for a local server, or the machine's LAN IP (e.g. `http://192.168.50.102:1234/v1`) if LM Studio runs on another machine.
 5. Leave `LMSTUDIO_API_KEY=lm-studio` in `.env`, or any other non-empty value your local setup accepts.
 
 Example:
@@ -75,7 +101,7 @@ provider:
 
 ## Chat UX
 
-- Chats are auto-saved under `.chatmate/chats`
+- Chats are auto-saved under `~/.chatmate/chats`
 - The sidebar lets you create, rename, switch, and delete saved chats
 - Press `Enter` to send the current message
 - Press `Shift+Enter` to insert a new line in the message box
