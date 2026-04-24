@@ -1,0 +1,76 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    runs-on: macos-latest   # arm64 (Apple Silicon)
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install project dependencies
+        run: uv sync
+
+      - name: Install PyInstaller
+        # pyinstaller-hooks-contrib ships PySide6 Qt plugin hooks and is
+        # pulled in automatically by recent PyInstaller, but we pin it
+        # explicitly to guarantee the PySide6 hooks are present.
+        run: uv run pip install "pyinstaller>=6.13" pyinstaller-hooks-contrib
+
+      - name: Build .app bundle
+        run: uv run pyinstaller ChatMate.spec --noconfirm
+
+      - name: Verify app bundle
+        run: test -d dist/ChatMate.app && echo "Build OK"
+
+      - name: Ad-hoc code sign
+        # No developer certificate required. Ad-hoc signing prevents macOS
+        # Monterey+ from showing "app is damaged" — users see the standard
+        # "unidentified developer" warning instead and can dismiss it with
+        # right-click → Open.
+        run: |
+          codesign --force --deep --sign - dist/ChatMate.app
+
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Create DMG
+        run: |
+          create-dmg \
+            --volname "ChatMate" \
+            --window-pos 200 120 \
+            --window-size 560 300 \
+            --icon-size 100 \
+            --icon "ChatMate.app" 140 140 \
+            --hide-extension "ChatMate.app" \
+            --app-drop-link 420 140 \
+            "dist/ChatMate-${{ github.ref_name }}.dmg" \
+            "dist/ChatMate.app"
+
+      - name: Ad-hoc sign DMG
+        run: codesign --sign - "dist/ChatMate-${{ github.ref_name }}.dmg"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "ChatMate ${{ github.ref_name }}" \
+            --generate-notes \
+            "dist/ChatMate-${{ github.ref_name }}.dmg"
