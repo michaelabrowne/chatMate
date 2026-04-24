@@ -11,7 +11,7 @@ provider:
   active: lmstudio
 
   openai:
-    model: "gpt-4o"
+    model: "gpt-5.4"
     base_url:
 
   anthropic:
