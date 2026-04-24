@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-# PyInstaller 6.x: block_cipher / cipher= removed entirely
+# Windows build — no BUNDLE section, produces an onedir .exe
 
 a = Analysis(
     ["main.py"],
@@ -36,13 +36,10 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=False,          # UPX is unreliable on macOS arm64
-    console=False,      # No terminal window
+    upx=False,
+    console=False,
     disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch=None,
-    codesign_identity=None,   # Unsigned — no dev cert required
-    entitlements_file=None,
+    icon=None,
 )
 
 coll = COLLECT(
@@ -53,19 +50,4 @@ coll = COLLECT(
     strip=False,
     upx=False,
     name="ChatMate",
-)
-
-app = BUNDLE(
-    coll,
-    name="ChatMate.app",
-    icon=None,
-    bundle_identifier="com.chatmate.app",
-    info_plist={
-        "CFBundleName": "ChatMate",
-        "CFBundleDisplayName": "ChatMate",
-        "CFBundleShortVersionString": "0.1.0",
-        "NSHighResolutionCapable": True,
-        "NSRequiresAquaSystemAppearance": False,  # Supports dark mode
-        "LSMinimumSystemVersion": "12.0",
-    },
 )

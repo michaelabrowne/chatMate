@@ -9,7 +9,23 @@ permissions:
   contents: write
 
 jobs:
+  # Create the release first so both platform jobs can upload to it in parallel
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "ChatMate ${{ github.ref_name }}" \
+            --generate-notes
+
   build-macos:
+    needs: create-release
     runs-on: macos-latest   # arm64 (Apple Silicon)
 
     steps:
@@ -28,9 +44,6 @@ jobs:
         run: uv sync
 
       - name: Install PyInstaller
-        # pyinstaller-hooks-contrib ships PySide6 Qt plugin hooks and is
-        # pulled in automatically by recent PyInstaller, but we pin it
-        # explicitly to guarantee the PySide6 hooks are present.
         run: uv run pip install "pyinstaller>=6.13" pyinstaller-hooks-contrib
 
       - name: Build .app bundle
@@ -40,12 +53,10 @@ jobs:
         run: test -d dist/ChatMate.app && echo "Build OK"
 
       - name: Ad-hoc code sign
-        # No developer certificate required. Ad-hoc signing prevents macOS
-        # Monterey+ from showing "app is damaged" — users see the standard
-        # "unidentified developer" warning instead and can dismiss it with
-        # right-click → Open.
-        run: |
-          codesign --force --deep --sign - dist/ChatMate.app
+        # Ad-hoc signing prevents macOS Monterey+ from showing "app is damaged".
+        # Users see the standard "unidentified developer" warning and can dismiss
+        # it with right-click → Open.
+        run: codesign --force --deep --sign - dist/ChatMate.app
 
       - name: Install create-dmg
         run: brew install create-dmg
@@ -60,17 +71,57 @@ jobs:
             --icon "ChatMate.app" 140 140 \
             --hide-extension "ChatMate.app" \
             --app-drop-link 420 140 \
-            "dist/ChatMate-${{ github.ref_name }}.dmg" \
+            "dist/ChatMate-${{ github.ref_name }}-mac.dmg" \
             "dist/ChatMate.app"
 
       - name: Ad-hoc sign DMG
-        run: codesign --sign - "dist/ChatMate-${{ github.ref_name }}.dmg"
+        run: codesign --sign - "dist/ChatMate-${{ github.ref_name }}-mac.dmg"
 
-      - name: Create GitHub Release
+      - name: Upload DMG to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${{ github.ref_name }}" \
-            --title "ChatMate ${{ github.ref_name }}" \
-            --generate-notes \
-            "dist/ChatMate-${{ github.ref_name }}.dmg"
+          gh release upload "${{ github.ref_name }}" \
+            "dist/ChatMate-${{ github.ref_name }}-mac.dmg"
+
+  build-windows:
+    needs: create-release
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install project dependencies
+        run: uv sync
+
+      - name: Install PyInstaller
+        run: uv run pip install "pyinstaller>=6.13" pyinstaller-hooks-contrib
+
+      - name: Build Windows exe
+        run: uv run pyinstaller ChatMate-windows.spec --noconfirm
+
+      - name: Verify exe
+        shell: pwsh
+        run: |
+          if (!(Test-Path "dist\ChatMate\ChatMate.exe")) { exit 1 }
+          Write-Output "Build OK"
+
+      - name: Create zip archive
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist\ChatMate -DestinationPath "dist\ChatMate-${{ github.ref_name }}-windows.zip"
+
+      - name: Upload zip to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.ref_name }}" "dist/ChatMate-${{ github.ref_name }}-windows.zip"
